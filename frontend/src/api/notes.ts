@@ -70,6 +70,35 @@ export async function listTopics(): Promise<Topic[]> {
   return apiFetch<Topic[]>("/api/topics");
 }
 
+export async function createTopic(input: {
+  name: string;
+  color: string;
+  icon_type: "emoji" | "image";
+  icon_emoji?: string | null;
+  icon_image_url?: string | null;
+}): Promise<Topic> {
+  return apiFetch<Topic>("/api/topics", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateTopic(
+  id: string,
+  input: Partial<{
+    name: string;
+    color: string;
+    icon_type: "emoji" | "image";
+    icon_emoji: string | null;
+    icon_image_url: string | null;
+  }>,
+): Promise<Topic> {
+  return apiFetch<Topic>(`/api/topics/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
 export async function listTags(): Promise<Tag[]> {
   return apiFetch<Tag[]>("/api/tags");
 }

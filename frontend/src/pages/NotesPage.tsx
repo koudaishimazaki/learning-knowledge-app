@@ -3,10 +3,12 @@ import { clearAccessToken } from "../auth/token";
 import { me } from "../api/auth";
 import {
   createNote,
+  createTopic,
   deleteNote,
   listNotes,
   listTags,
   listTopics,
+  updateTopic,
   updateNote,
 } from "../api/notes";
 import type { Note, Tag, Topic } from "../types/notes";
@@ -51,6 +53,19 @@ export function NotesPage({ onLogout }: Props) {
 
   const [newTitle, setNewTitle] = useState("");
   const [newBody, setNewBody] = useState("");
+
+  const [topicMode, setTopicMode] = useState<"create" | "edit">("create");
+  const [selectedTopicId, setSelectedTopicId] = useState<string>("");
+  const selectedTopic = useMemo(
+    () => topics.find((t) => t.id === selectedTopicId) ?? null,
+    [topics, selectedTopicId],
+  );
+
+  const [topicName, setTopicName] = useState("");
+  const [topicColor, setTopicColor] = useState("blue");
+  const [topicIconType, setTopicIconType] = useState<"emoji" | "image">("emoji");
+  const [topicIconEmoji, setTopicIconEmoji] = useState("🧠");
+  const [topicIconUrl, setTopicIconUrl] = useState("");
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectedNote = useMemo(
@@ -112,6 +127,15 @@ export function NotesPage({ onLogout }: Props) {
     setEditTagIds(selectedNote.tag_ids);
   }, [selectedNote]);
 
+  useEffect(() => {
+    if (topicMode !== "edit" || !selectedTopic) return;
+    setTopicName(selectedTopic.name);
+    setTopicColor(selectedTopic.color);
+    setTopicIconType(selectedTopic.icon_type);
+    setTopicIconEmoji(selectedTopic.icon_emoji ?? "");
+    setTopicIconUrl(selectedTopic.icon_image_url ?? "");
+  }, [topicMode, selectedTopic]);
+
   async function submitNewNote(e: React.FormEvent) {
     e.preventDefault();
     if (!newTitle.trim()) return;
@@ -172,6 +196,43 @@ export function NotesPage({ onLogout }: Props) {
       await deleteNote(selectedNote.id);
       setSelectedId(null);
       await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitTopic(e: React.FormEvent) {
+    e.preventDefault();
+    if (!topicName.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (topicMode === "create") {
+        await createTopic({
+          name: topicName.trim(),
+          color: topicColor,
+          icon_type: topicIconType,
+          icon_emoji: topicIconType === "emoji" ? topicIconEmoji : null,
+          icon_image_url: topicIconType === "image" ? topicIconUrl : null,
+        });
+      } else {
+        if (!selectedTopic) return;
+        await updateTopic(selectedTopic.id, {
+          name: topicName.trim(),
+          color: topicColor,
+          icon_type: topicIconType,
+          icon_emoji: topicIconType === "emoji" ? topicIconEmoji : null,
+          icon_image_url: topicIconType === "image" ? topicIconUrl : null,
+        });
+      }
+      await load();
+      if (topicMode === "create") {
+        setTopicName("");
+        setTopicIconEmoji("🧠");
+        setTopicIconUrl("");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -340,12 +401,130 @@ export function NotesPage({ onLogout }: Props) {
           </div>
 
           <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
-            <div style={{ fontWeight: 700 }}>Topics</div>
-            <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {topics.length === 0 ? <div style={{ color: "#666" }}>Topicなし</div> : null}
-              {topics.map((t) => (
-                <TopicChip key={t.id} topic={t} />
-              ))}
+            <div style={{ fontWeight: 700 }}>Topic管理</div>
+            <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <label style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                  <input
+                    type="radio"
+                    checked={topicMode === "create"}
+                    onChange={() => setTopicMode("create")}
+                  />
+                  新規
+                </label>
+                <label style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                  <input
+                    type="radio"
+                    checked={topicMode === "edit"}
+                    onChange={() => setTopicMode("edit")}
+                  />
+                  編集
+                </label>
+
+                {topicMode === "edit" ? (
+                  <select
+                    value={selectedTopicId}
+                    onChange={(e) => setSelectedTopicId(e.target.value)}
+                    style={{ padding: 10, borderRadius: 10, border: "1px solid #ccc" }}
+                  >
+                    <option value="">Topic選択</option>
+                    {topics.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.icon_type === "emoji" ? t.icon_emoji : "🖼"} {t.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+              </div>
+
+              <form onSubmit={submitTopic} style={{ display: "grid", gap: 8 }}>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <span>名前</span>
+                  <input
+                    value={topicName}
+                    onChange={(e) => setTopicName(e.target.value)}
+                    required
+                    style={{ padding: 10, borderRadius: 10, border: "1px solid #ccc" }}
+                  />
+                </div>
+
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  <label style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                    <span>color</span>
+                    <select
+                      value={topicColor}
+                      onChange={(e) => setTopicColor(e.target.value)}
+                      style={{ padding: 10, borderRadius: 10, border: "1px solid #ccc" }}
+                    >
+                      {["blue", "purple", "green", "orange", "red", "gray"].map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                    <input
+                      type="radio"
+                      checked={topicIconType === "emoji"}
+                      onChange={() => setTopicIconType("emoji")}
+                    />
+                    emoji
+                  </label>
+                  <label style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                    <input
+                      type="radio"
+                      checked={topicIconType === "image"}
+                      onChange={() => setTopicIconType("image")}
+                    />
+                    image URL
+                  </label>
+                </div>
+
+                {topicIconType === "emoji" ? (
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <span>emoji</span>
+                    <input
+                      value={topicIconEmoji}
+                      onChange={(e) => setTopicIconEmoji(e.target.value)}
+                      placeholder="例: ⚛️"
+                      style={{ padding: 10, borderRadius: 10, border: "1px solid #ccc" }}
+                    />
+                  </div>
+                ) : (
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <span>image URL</span>
+                    <input
+                      value={topicIconUrl}
+                      onChange={(e) => setTopicIconUrl(e.target.value)}
+                      placeholder="https://..."
+                      style={{ padding: 10, borderRadius: 10, border: "1px solid #ccc" }}
+                    />
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={busy || (topicMode === "edit" && !selectedTopicId)}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: 10,
+                    border: "1px solid #222",
+                    background: "#222",
+                    color: "#fff",
+                  }}
+                >
+                  {topicMode === "create" ? "作成" : "更新"}
+                </button>
+              </form>
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {topics.length === 0 ? <div style={{ color: "#666" }}>Topicなし</div> : null}
+                {topics.map((t) => (
+                  <TopicChip key={t.id} topic={t} />
+                ))}
+              </div>
             </div>
           </div>
         </div>
