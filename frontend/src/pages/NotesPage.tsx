@@ -6,13 +6,16 @@ import {
   createTopic,
   deleteNote,
   createTag,
+  deleteTag,
   listNotes,
   listTags,
   listTopics,
+  updateTag,
   updateTopic,
   updateNote,
 } from "../api/notes";
 import type { Note, Tag, Topic } from "../types/notes";
+import { getStatsSummary, type StatsSummary } from "../api/stats";
 
 type Props = {
   onLogout: () => void;
@@ -29,8 +32,8 @@ function TopicChip({ topic }: { topic: Topic }) {
         gap: 6,
         padding: "4px 10px",
         borderRadius: 999,
-        border: "1px solid #ddd",
-        background: "#fff",
+        border: "1px solid var(--border)",
+        background: "rgba(255, 255, 255, 0.06)",
       }}
       title={topic.name}
     >
@@ -45,12 +48,15 @@ export function NotesPage({ onLogout }: Props) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
+  const [stats, setStats] = useState<StatsSummary | null>(null);
 
   const [q, setQ] = useState("");
   const [starredOnly, setStarredOnly] = useState(false);
   const [topicId, setTopicId] = useState<string>("");
   const [tagIds, setTagIds] = useState<string[]>([]);
   const [sort, setSort] = useState<"updated_desc" | "created_desc" | "relevance">("updated_desc");
+  const [pageSize, setPageSize] = useState(20);
+  const [offset, setOffset] = useState(0);
 
   const [newTitle, setNewTitle] = useState("");
   const [newBody, setNewBody] = useState("");
@@ -69,6 +75,8 @@ export function NotesPage({ onLogout }: Props) {
   const [topicIconUrl, setTopicIconUrl] = useState("");
 
   const [newTagName, setNewTagName] = useState("");
+  const [tagManageId, setTagManageId] = useState<string | null>(null);
+  const [tagManageName, setTagManageName] = useState("");
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectedNote = useMemo(
@@ -81,34 +89,57 @@ export function NotesPage({ onLogout }: Props) {
   const [editStarred, setEditStarred] = useState(false);
   const [editTopicId, setEditTopicId] = useState<string | null>(null);
   const [editTagIds, setEditTagIds] = useState<string[]>([]);
+  const [editTagQuery, setEditTagQuery] = useState("");
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const canUseRelevance = useMemo(() => q.trim().length > 0, [q]);
 
-  async function load() {
+  const isDirty = useMemo(() => {
+    if (!selectedNote) return false;
+    const a = [...editTagIds].sort().join(",");
+    const b = [...selectedNote.tag_ids].sort().join(",");
+    return (
+      editTitle !== selectedNote.title ||
+      editBody !== selectedNote.markdown_content ||
+      editStarred !== selectedNote.is_starred ||
+      (editTopicId ?? null) !== (selectedNote.topic_id ?? null) ||
+      a !== b
+    );
+  }, [editBody, editStarred, editTagIds, editTitle, editTopicId, selectedNote]);
+
+  const filteredEditTags = useMemo(() => {
+    const qq = editTagQuery.trim().toLowerCase();
+    if (!qq) return tags;
+    return tags.filter((t) => t.name.toLowerCase().includes(qq));
+  }, [editTagQuery, tags]);
+
+  async function load(nextOffset: number = offset) {
     setBusy(true);
     setError(null);
     try {
-      const [meRes, topicsRes, tagsRes, notesRes] = await Promise.all([
+      const [meRes, topicsRes, tagsRes, statsRes, notesRes] = await Promise.all([
         me(),
         listTopics(),
         listTags(),
+        getStatsSummary(),
         listNotes({
           q: q.trim() || undefined,
           starred: starredOnly ? true : undefined,
           topic_id: topicId || undefined,
           tag_ids: tagIds.length ? tagIds : undefined,
           sort: sort === "relevance" && !canUseRelevance ? "updated_desc" : sort,
-          limit: 50,
-          offset: 0,
+          limit: pageSize,
+          offset: nextOffset,
         }),
       ]);
       setEmail(meRes.email);
       setTopics(topicsRes);
       setTags(tagsRes);
+      setStats(statsRes);
       setNotes(notesRes);
+      setOffset(nextOffset);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -148,7 +179,7 @@ export function NotesPage({ onLogout }: Props) {
       await createNote({ title: newTitle.trim(), markdown_content: newBody });
       setNewTitle("");
       setNewBody("");
-      await load();
+      await load(0);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -259,29 +290,61 @@ export function NotesPage({ onLogout }: Props) {
     }
   }
 
+  async function startEditTag(t: Tag) {
+    setTagManageId(t.id);
+    setTagManageName(t.name);
+  }
+
+  async function submitEditTag(e: React.FormEvent) {
+    e.preventDefault();
+    if (!tagManageId) return;
+    if (!tagManageName.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await updateTag(tagManageId, { name: tagManageName.trim() });
+      setTagManageId(null);
+      setTagManageName("");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeTag(id: string) {
+    if (!confirm("タグを削除しますか？（紐づきも解除されます）")) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await deleteTag(id);
+      if (tagIds.includes(id)) setTagIds((prev) => prev.filter((x) => x !== id));
+      if (editTagIds.includes(id)) setEditTagIds((prev) => prev.filter((x) => x !== id));
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <div style={{ maxWidth: 980, margin: "24px auto", padding: 16, fontFamily: "system-ui" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <div>
-          <h1 style={{ margin: 0 }}>MyKnowledge</h1>
-          <div style={{ marginTop: 6, color: "#555" }}>{email}</div>
+    <div className="container">
+      <div className="topbar">
+        <div className="brand">
+          <h1>MyKnowledge</h1>
+          <p>{email}</p>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button
             onClick={() => void load()}
             disabled={busy}
-            style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #ddd" }}
           >
             再読込
           </button>
           <button
             onClick={() => void logout()}
-            style={{
-              padding: "8px 10px",
-              borderRadius: 10,
-              border: "1px solid #222",
-              background: "#fff",
-            }}
           >
             ログアウト
           </button>
@@ -289,14 +352,35 @@ export function NotesPage({ onLogout }: Props) {
       </div>
 
       <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
-        <div
-          style={{
-            border: "1px solid #ddd",
-            borderRadius: 12,
-            padding: 12,
-            background: "#fff",
-          }}
-        >
+        {stats ? (
+          <div className="card">
+            <div className="card-inner">
+              <div className="section-title">Stats</div>
+              <div style={{ marginTop: 10, display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
+                <div>
+                  <div style={{ color: "var(--muted-2)", fontSize: 12 }}>Totals</div>
+                  <div style={{ marginTop: 6, display: "flex", gap: 12, flexWrap: "wrap" }}>
+                    <div>notes: <b>{stats.notes_total}</b></div>
+                    <div>starred: <b>{stats.starred_total}</b></div>
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: "var(--muted-2)", fontSize: 12 }}>Top tags / topics</div>
+                  <div style={{ marginTop: 6, display: "grid", gap: 6 }}>
+                    <div style={{ color: "var(--muted)" }}>
+                      tags: {stats.tags.slice(0, 5).map((t) => `${t.name}(${t.count})`).join(", ") || "-"}
+                    </div>
+                    <div style={{ color: "var(--muted)" }}>
+                      topics: {stats.topics.slice(0, 5).map((t) => `${t.name}(${t.count})`).join(", ") || "-"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        <div className="card">
+          <div className="card-inner">
           <div style={{ display: "grid", gap: 10 }}>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
               <input
@@ -305,9 +389,6 @@ export function NotesPage({ onLogout }: Props) {
                 placeholder={`検索（例: jwt / "cleanup" / jwt -refresh）`}
                 style={{
                   flex: "1 1 320px",
-                  padding: 10,
-                  borderRadius: 10,
-                  border: "1px solid #ccc",
                 }}
               />
               <label style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
@@ -321,7 +402,6 @@ export function NotesPage({ onLogout }: Props) {
               <select
                 value={sort}
                 onChange={(e) => setSort(e.target.value as typeof sort)}
-                style={{ padding: 10, borderRadius: 10, border: "1px solid #ccc" }}
               >
                 <option value="updated_desc">更新順</option>
                 <option value="created_desc">作成順</option>
@@ -330,15 +410,9 @@ export function NotesPage({ onLogout }: Props) {
                 </option>
               </select>
               <button
-                onClick={() => void load()}
+                onClick={() => void load(0)}
                 disabled={busy}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 10,
-                  border: "1px solid #222",
-                  background: "#222",
-                  color: "#fff",
-                }}
+                className="btn-primary"
               >
                 検索
               </button>
@@ -381,46 +455,38 @@ export function NotesPage({ onLogout }: Props) {
               </div>
             </div>
           </div>
+          </div>
         </div>
 
-        {error ? <div style={{ color: "#b00020" }}>{error}</div> : null}
+        {error ? <div className="error">{error}</div> : null}
 
         <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr" }}>
-          <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
-            <div style={{ fontWeight: 700 }}>クイック追加</div>
+          <div className="card">
+            <div className="card-inner">
+            <div className="section-title">クイック追加</div>
             <form onSubmit={submitNewNote} style={{ display: "grid", gap: 8, marginTop: 10 }}>
               <input
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
                 placeholder="タイトル（必須）"
                 required
-                style={{ padding: 10, borderRadius: 10, border: "1px solid #ccc" }}
               />
               <textarea
                 value={newBody}
                 onChange={(e) => setNewBody(e.target.value)}
                 placeholder="本文（Markdown、任意）"
                 rows={6}
-                style={{ padding: 10, borderRadius: 10, border: "1px solid #ccc" }}
               />
-              <button
-                type="submit"
-                disabled={busy}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 10,
-                  border: "1px solid #222",
-                  background: "#222",
-                  color: "#fff",
-                }}
-              >
+              <button type="submit" disabled={busy} className="btn-primary">
                 追加
               </button>
             </form>
+            </div>
           </div>
 
-          <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
-            <div style={{ fontWeight: 700 }}>Topic管理</div>
+          <div className="card">
+            <div className="card-inner">
+            <div className="section-title">Topic管理</div>
             <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                 <label style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
@@ -444,7 +510,6 @@ export function NotesPage({ onLogout }: Props) {
                   <select
                     value={selectedTopicId}
                     onChange={(e) => setSelectedTopicId(e.target.value)}
-                    style={{ padding: 10, borderRadius: 10, border: "1px solid #ccc" }}
                   >
                     <option value="">Topic選択</option>
                     {topics.map((t) => (
@@ -463,7 +528,6 @@ export function NotesPage({ onLogout }: Props) {
                     value={topicName}
                     onChange={(e) => setTopicName(e.target.value)}
                     required
-                    style={{ padding: 10, borderRadius: 10, border: "1px solid #ccc" }}
                   />
                 </div>
 
@@ -473,7 +537,6 @@ export function NotesPage({ onLogout }: Props) {
                     <select
                       value={topicColor}
                       onChange={(e) => setTopicColor(e.target.value)}
-                      style={{ padding: 10, borderRadius: 10, border: "1px solid #ccc" }}
                     >
                       {["blue", "purple", "green", "orange", "red", "gray"].map((c) => (
                         <option key={c} value={c}>
@@ -508,7 +571,6 @@ export function NotesPage({ onLogout }: Props) {
                       value={topicIconEmoji}
                       onChange={(e) => setTopicIconEmoji(e.target.value)}
                       placeholder="例: ⚛️"
-                      style={{ padding: 10, borderRadius: 10, border: "1px solid #ccc" }}
                     />
                   </div>
                 ) : (
@@ -518,22 +580,11 @@ export function NotesPage({ onLogout }: Props) {
                       value={topicIconUrl}
                       onChange={(e) => setTopicIconUrl(e.target.value)}
                       placeholder="https://..."
-                      style={{ padding: 10, borderRadius: 10, border: "1px solid #ccc" }}
                     />
                   </div>
                 )}
 
-                <button
-                  type="submit"
-                  disabled={busy || (topicMode === "edit" && !selectedTopicId)}
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: 10,
-                    border: "1px solid #222",
-                    background: "#222",
-                    color: "#fff",
-                  }}
-                >
+                <button type="submit" disabled={busy || (topicMode === "edit" && !selectedTopicId)} className="btn-primary">
                   {topicMode === "create" ? "作成" : "更新"}
                 </button>
               </form>
@@ -545,40 +596,125 @@ export function NotesPage({ onLogout }: Props) {
                 ))}
               </div>
             </div>
+            </div>
           </div>
         </div>
 
-        <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
-          <div style={{ fontWeight: 700 }}>Tag追加</div>
+        <div className="card">
+          <div className="card-inner">
+          <div className="section-title">Tag追加</div>
           <form onSubmit={submitTag} style={{ marginTop: 10, display: "flex", gap: 8 }}>
             <input
               value={newTagName}
               onChange={(e) => setNewTagName(e.target.value)}
               placeholder="例: react"
-              style={{ flex: "1 1 240px", padding: 10, borderRadius: 10, border: "1px solid #ccc" }}
+              style={{ flex: "1 1 240px" }}
             />
-            <button
-              type="submit"
-              disabled={busy}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: "1px solid #222",
-                background: "#222",
-                color: "#fff",
-              }}
-            >
+            <button type="submit" disabled={busy} className="btn-primary">
               追加
             </button>
           </form>
-          <div style={{ marginTop: 10, color: "#666", fontSize: 12 }}>
+          <div style={{ marginTop: 10, color: "var(--muted)", fontSize: 12 }}>
             追加したタグは、検索フィルタ・ノート編集のタグ候補に反映されます。
+          </div>
+
+          <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
+            <div className="section-title" style={{ fontSize: 13 }}>
+              Tag管理（{tags.length}）
+            </div>
+
+            {tagManageId ? (
+              <form onSubmit={submitEditTag} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  value={tagManageName}
+                  onChange={(e) => setTagManageName(e.target.value)}
+                  placeholder="タグ名"
+                  style={{ flex: "1 1 220px" }}
+                />
+                <button type="submit" className="btn-primary" disabled={busy}>
+                  更新
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTagManageId(null);
+                    setTagManageName("");
+                  }}
+                  disabled={busy}
+                >
+                  キャンセル
+                </button>
+              </form>
+            ) : null}
+
+            <div style={{ display: "grid", gap: 6, maxHeight: 220, overflow: "auto" }}>
+              {tags.map((t) => (
+                <div
+                  key={t.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 10,
+                    padding: "8px 10px",
+                    borderRadius: 12,
+                    border: "1px solid var(--border)",
+                    background: "rgba(255, 255, 255, 0.04)",
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {t.name}
+                    </div>
+                    <div style={{ color: "var(--muted-2)", fontSize: 12 }}>
+                      usage: {t.usage_count ?? 0}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                    <button type="button" onClick={() => void startEditTag(t)} disabled={busy}>
+                      編集
+                    </button>
+                    <button type="button" onClick={() => void removeTag(t.id)} disabled={busy}>
+                      削除
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {tags.length === 0 ? <div style={{ color: "var(--muted)" }}>Tagなし</div> : null}
+            </div>
+          </div>
           </div>
         </div>
 
         <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr" }}>
-          <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
-            <div style={{ fontWeight: 700 }}>Notes（{notes.length}）</div>
+          <div className="card">
+            <div className="card-inner">
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+              <div className="section-title">Notes（{notes.length}）</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <select
+                  value={pageSize}
+                  onChange={(e) => setPageSize(Number(e.target.value))}
+                  style={{ width: 120 }}
+                  disabled={busy}
+                >
+                  {[10, 20, 50, 100].map((n) => (
+                    <option key={n} value={n}>
+                      {n}/page
+                    </option>
+                  ))}
+                </select>
+                <button type="button" onClick={() => void load(Math.max(0, offset - pageSize))} disabled={busy || offset === 0}>
+                  前へ
+                </button>
+                <button type="button" onClick={() => void load(offset + pageSize)} disabled={busy || notes.length < pageSize}>
+                  次へ
+                </button>
+                <div style={{ color: "var(--muted-2)", fontSize: 12 }}>
+                  offset: {offset}
+                </div>
+              </div>
+            </div>
             <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
               {busy ? <div>Loading...</div> : null}
               {notes.map((n) => {
@@ -589,61 +725,54 @@ export function NotesPage({ onLogout }: Props) {
                     onClick={() => setSelectedId(n.id)}
                     style={{
                       textAlign: "left",
-                      border: selected ? "2px solid #222" : "1px solid #eee",
+                      border: selected ? "2px solid rgba(124, 92, 255, 0.75)" : "1px solid var(--border)",
                       borderRadius: 12,
                       padding: 12,
-                      background: "#fff",
-                      cursor: "pointer",
+                      background: "rgba(255, 255, 255, 0.06)",
                     }}
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
                       <div style={{ fontWeight: 650 }}>{n.title}</div>
-                      <div style={{ color: "#777", fontSize: 12 }}>
+                      <div style={{ color: "var(--muted-2)", fontSize: 12 }}>
                         {new Date(n.updated_at).toLocaleString()}
                       </div>
                     </div>
                     {n.summary ? (
-                      <div style={{ marginTop: 6, color: "#444" }}>{n.summary}</div>
+                      <div style={{ marginTop: 6, color: "var(--muted)" }}>{n.summary}</div>
                     ) : null}
-                    <div style={{ marginTop: 8, color: "#666", fontSize: 12 }}>
+                    <div style={{ marginTop: 8, color: "var(--muted-2)", fontSize: 12 }}>
                       {n.is_starred ? "★" : "☆"} / tags: {n.tag_ids.length ? n.tag_ids.length : 0}
                     </div>
                   </button>
                 );
               })}
               {!busy && notes.length === 0 ? (
-                <div style={{ color: "#666" }}>ノートが見つかりません</div>
+                <div style={{ color: "var(--muted)" }}>ノートが見つかりません</div>
               ) : null}
+            </div>
             </div>
           </div>
 
-          <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
+          <div className="card">
+            <div className="card-inner">
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-              <div style={{ fontWeight: 700 }}>詳細/編集</div>
+              <div className="section-title">詳細/編集</div>
               {selectedNote ? (
                 <div style={{ display: "flex", gap: 8 }}>
                   <button
                     onClick={() => void saveSelected()}
-                    disabled={busy}
-                    style={{
-                      padding: "8px 10px",
-                      borderRadius: 10,
-                      border: "1px solid #222",
-                      background: "#222",
-                      color: "#fff",
-                    }}
+                    disabled={busy || !isDirty}
+                    className="btn-primary"
                   >
-                    保存
+                    保存{isDirty ? "（未保存）" : ""}
                   </button>
                   <button
                     onClick={() => void deleteSelected()}
                     disabled={busy}
                     style={{
-                      padding: "8px 10px",
-                      borderRadius: 10,
-                      border: "1px solid #b00020",
-                      background: "#fff",
-                      color: "#b00020",
+                      borderColor: "rgba(255, 77, 109, 0.45)",
+                      background: "rgba(255, 77, 109, 0.10)",
+                      color: "rgba(255, 255, 255, 0.92)",
                     }}
                   >
                     削除
@@ -661,7 +790,6 @@ export function NotesPage({ onLogout }: Props) {
                   <input
                     value={editTitle}
                     onChange={(e) => setEditTitle(e.target.value)}
-                    style={{ padding: 10, borderRadius: 10, border: "1px solid #ccc" }}
                   />
                 </label>
 
@@ -671,7 +799,6 @@ export function NotesPage({ onLogout }: Props) {
                     value={editBody}
                     onChange={(e) => setEditBody(e.target.value)}
                     rows={10}
-                    style={{ padding: 10, borderRadius: 10, border: "1px solid #ccc" }}
                   />
                 </label>
 
@@ -688,7 +815,6 @@ export function NotesPage({ onLogout }: Props) {
                   <select
                     value={editTopicId ?? ""}
                     onChange={(e) => setEditTopicId(e.target.value || null)}
-                    style={{ padding: 10, borderRadius: 10, border: "1px solid #ccc" }}
                   >
                     <option value="">Topic: なし</option>
                     {topics.map((t) => (
@@ -701,8 +827,23 @@ export function NotesPage({ onLogout }: Props) {
 
                 <div>
                   <div style={{ fontWeight: 600, marginBottom: 8 }}>Tags</div>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {tags.slice(0, 30).map((t) => {
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <input
+                      value={editTagQuery}
+                      onChange={(e) => setEditTagQuery(e.target.value)}
+                      placeholder="タグ絞り込み（例: react）"
+                      style={{ flex: "1 1 220px" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setEditTagIds([])}
+                      disabled={busy || editTagIds.length === 0}
+                    >
+                      クリア
+                    </button>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                    {filteredEditTags.map((t) => {
                       const active = editTagIds.includes(t.id);
                       return (
                         <button
@@ -711,10 +852,12 @@ export function NotesPage({ onLogout }: Props) {
                           style={{
                             padding: "6px 10px",
                             borderRadius: 999,
-                            border: `1px solid ${active ? "#222" : "#ddd"}`,
-                            background: active ? "#222" : "#fff",
-                            color: active ? "#fff" : "#222",
-                            cursor: "pointer",
+                            border: active
+                              ? "1px solid rgba(124, 92, 255, 0.65)"
+                              : "1px solid var(--border)",
+                            background: active
+                              ? "rgba(124, 92, 255, 0.22)"
+                              : "rgba(255, 255, 255, 0.06)",
                           }}
                         >
                           {t.name}
@@ -725,6 +868,7 @@ export function NotesPage({ onLogout }: Props) {
                 </div>
               </div>
             )}
+            </div>
           </div>
         </div>
       </div>

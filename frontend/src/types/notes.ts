@@ -22,5 +22,6 @@ export type Topic = {
 export type Tag = {
   id: string;
   name: string;
+  usage_count?: number;
 };
 

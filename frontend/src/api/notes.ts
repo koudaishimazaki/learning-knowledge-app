@@ -110,3 +110,14 @@ export async function createTag(input: { name: string }): Promise<Tag> {
   });
 }
 
+export async function updateTag(id: string, input: { name: string }): Promise<Tag> {
+  return apiFetch<Tag>(`/api/tags/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteTag(id: string): Promise<void> {
+  return apiFetch<void>(`/api/tags/${id}`, { method: "DELETE" });
+}
+
