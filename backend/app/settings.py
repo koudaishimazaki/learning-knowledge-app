@@ -1,10 +1,27 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(case_sensitive=False)
+    model_config = SettingsConfigDict(
+        case_sensitive=False,
+        env_file=".env",
+        extra="ignore",
+    )
 
-    cors_origins: str = "http://localhost:5173"
+    database_url: str = Field(
+        default="postgresql+psycopg://myknowledge:myknowledge@db:5432/myknowledge",
+        validation_alias="DATABASE_URL",
+    )
+    jwt_secret: str = Field(default="change-me", validation_alias="JWT_SECRET")
+    access_token_expire_minutes: int = Field(
+        default=60 * 24 * 7, validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES"
+    )
+
+    cors_origins: str = Field(
+        default="http://localhost:5173",
+        validation_alias="CORS_ORIGINS",
+    )
 
     @property
     def cors_origins_list(self) -> list[str]:

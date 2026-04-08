@@ -2,8 +2,10 @@ fastapi
 uvicorn[standard]
 pydantic
 pydantic-settings
+email-validator
 python-jose[cryptography]
-passlib[bcrypt]
+passlib[argon2]
+argon2-cffi
 sqlalchemy
 psycopg[binary]
 alembic
