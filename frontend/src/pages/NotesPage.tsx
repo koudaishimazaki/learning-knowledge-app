@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { clearAccessToken } from "../auth/token";
 import { me } from "../api/auth";
-import { createNote, listNotes, listTags, listTopics } from "../api/notes";
+import {
+  createNote,
+  deleteNote,
+  listNotes,
+  listTags,
+  listTopics,
+  updateNote,
+} from "../api/notes";
 import type { Note, Tag, Topic } from "../types/notes";
 
 type Props = {
@@ -45,6 +52,18 @@ export function NotesPage({ onLogout }: Props) {
   const [newTitle, setNewTitle] = useState("");
   const [newBody, setNewBody] = useState("");
 
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedNote = useMemo(
+    () => notes.find((n) => n.id === selectedId) ?? null,
+    [notes, selectedId],
+  );
+
+  const [editTitle, setEditTitle] = useState("");
+  const [editBody, setEditBody] = useState("");
+  const [editStarred, setEditStarred] = useState(false);
+  const [editTopicId, setEditTopicId] = useState<string | null>(null);
+  const [editTagIds, setEditTagIds] = useState<string[]>([]);
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -84,6 +103,15 @@ export function NotesPage({ onLogout }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!selectedNote) return;
+    setEditTitle(selectedNote.title);
+    setEditBody(selectedNote.markdown_content);
+    setEditStarred(selectedNote.is_starred);
+    setEditTopicId(selectedNote.topic_id);
+    setEditTagIds(selectedNote.tag_ids);
+  }, [selectedNote]);
+
   async function submitNewNote(e: React.FormEvent) {
     e.preventDefault();
     if (!newTitle.trim()) return;
@@ -105,9 +133,50 @@ export function NotesPage({ onLogout }: Props) {
     setTagIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
+  function toggleEditTag(id: string) {
+    setEditTagIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
   async function logout() {
     clearAccessToken();
     onLogout();
+  }
+
+  async function saveSelected() {
+    if (!selectedNote) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await updateNote(selectedNote.id, {
+        title: editTitle.trim(),
+        markdown_content: editBody,
+        is_starred: editStarred,
+        topic_id: editTopicId,
+        tag_ids: editTagIds,
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteSelected() {
+    if (!selectedNote) return;
+    const ok = window.confirm("このノートを削除しますか？");
+    if (!ok) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await deleteNote(selectedNote.id);
+      setSelectedId(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -281,37 +350,155 @@ export function NotesPage({ onLogout }: Props) {
           </div>
         </div>
 
-        <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
-          <div style={{ fontWeight: 700 }}>Notes（{notes.length}）</div>
-          <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-            {busy ? <div>Loading...</div> : null}
-            {notes.map((n) => (
-              <div
-                key={n.id}
-                style={{
-                  border: "1px solid #eee",
-                  borderRadius: 12,
-                  padding: 12,
-                  background: "#fff",
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                  <div style={{ fontWeight: 650 }}>{n.title}</div>
-                  <div style={{ color: "#777", fontSize: 12 }}>
-                    {new Date(n.updated_at).toLocaleString()}
+        <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr" }}>
+          <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
+            <div style={{ fontWeight: 700 }}>Notes（{notes.length}）</div>
+            <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+              {busy ? <div>Loading...</div> : null}
+              {notes.map((n) => {
+                const selected = n.id === selectedId;
+                return (
+                  <button
+                    key={n.id}
+                    onClick={() => setSelectedId(n.id)}
+                    style={{
+                      textAlign: "left",
+                      border: selected ? "2px solid #222" : "1px solid #eee",
+                      borderRadius: 12,
+                      padding: 12,
+                      background: "#fff",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <div style={{ fontWeight: 650 }}>{n.title}</div>
+                      <div style={{ color: "#777", fontSize: 12 }}>
+                        {new Date(n.updated_at).toLocaleString()}
+                      </div>
+                    </div>
+                    {n.summary ? (
+                      <div style={{ marginTop: 6, color: "#444" }}>{n.summary}</div>
+                    ) : null}
+                    <div style={{ marginTop: 8, color: "#666", fontSize: 12 }}>
+                      {n.is_starred ? "★" : "☆"} / tags: {n.tag_ids.length ? n.tag_ids.length : 0}
+                    </div>
+                  </button>
+                );
+              })}
+              {!busy && notes.length === 0 ? (
+                <div style={{ color: "#666" }}>ノートが見つかりません</div>
+              ) : null}
+            </div>
+          </div>
+
+          <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+              <div style={{ fontWeight: 700 }}>詳細/編集</div>
+              {selectedNote ? (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    onClick={() => void saveSelected()}
+                    disabled={busy}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      border: "1px solid #222",
+                      background: "#222",
+                      color: "#fff",
+                    }}
+                  >
+                    保存
+                  </button>
+                  <button
+                    onClick={() => void deleteSelected()}
+                    disabled={busy}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      border: "1px solid #b00020",
+                      background: "#fff",
+                      color: "#b00020",
+                    }}
+                  >
+                    削除
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            {!selectedNote ? (
+              <div style={{ marginTop: 12, color: "#666" }}>ノートを選択してください</div>
+            ) : (
+              <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+                <label style={{ display: "grid", gap: 6 }}>
+                  <span>タイトル</span>
+                  <input
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    style={{ padding: 10, borderRadius: 10, border: "1px solid #ccc" }}
+                  />
+                </label>
+
+                <label style={{ display: "grid", gap: 6 }}>
+                  <span>本文（Markdown）</span>
+                  <textarea
+                    value={editBody}
+                    onChange={(e) => setEditBody(e.target.value)}
+                    rows={10}
+                    style={{ padding: 10, borderRadius: 10, border: "1px solid #ccc" }}
+                  />
+                </label>
+
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  <label style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={editStarred}
+                      onChange={(e) => setEditStarred(e.target.checked)}
+                    />
+                    スター
+                  </label>
+
+                  <select
+                    value={editTopicId ?? ""}
+                    onChange={(e) => setEditTopicId(e.target.value || null)}
+                    style={{ padding: 10, borderRadius: 10, border: "1px solid #ccc" }}
+                  >
+                    <option value="">Topic: なし</option>
+                    {topics.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.icon_type === "emoji" ? t.icon_emoji : "🖼"} {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <div style={{ fontWeight: 600, marginBottom: 8 }}>Tags</div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {tags.slice(0, 30).map((t) => {
+                      const active = editTagIds.includes(t.id);
+                      return (
+                        <button
+                          key={t.id}
+                          onClick={() => toggleEditTag(t.id)}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: 999,
+                            border: `1px solid ${active ? "#222" : "#ddd"}`,
+                            background: active ? "#222" : "#fff",
+                            color: active ? "#fff" : "#222",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {t.name}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
-                {n.summary ? <div style={{ marginTop: 6, color: "#444" }}>{n.summary}</div> : null}
-                <div style={{ marginTop: 8, color: "#666", fontSize: 12 }}>
-                  {n.is_starred ? "★" : "☆"}{" "}
-                  {n.topic_id ? `topic: ${n.topic_id}` : "topic: -"} / tags:{" "}
-                  {n.tag_ids.length ? n.tag_ids.join(", ") : "-"}
-                </div>
               </div>
-            ))}
-            {!busy && notes.length === 0 ? (
-              <div style={{ color: "#666" }}>ノートが見つかりません</div>
-            ) : null}
+            )}
           </div>
         </div>
       </div>

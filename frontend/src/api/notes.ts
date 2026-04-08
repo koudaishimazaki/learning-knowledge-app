@@ -41,6 +41,31 @@ export async function createNote(input: {
   });
 }
 
+export async function getNote(id: string): Promise<Note> {
+  return apiFetch<Note>(`/api/notes/${id}`);
+}
+
+export async function updateNote(
+  id: string,
+  input: Partial<{
+    title: string;
+    markdown_content: string;
+    summary: string | null;
+    is_starred: boolean;
+    topic_id: string | null;
+    tag_ids: string[];
+  }>,
+): Promise<Note> {
+  return apiFetch<Note>(`/api/notes/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteNote(id: string): Promise<void> {
+  return apiFetch<void>(`/api/notes/${id}`, { method: "DELETE" });
+}
+
 export async function listTopics(): Promise<Topic[]> {
   return apiFetch<Topic[]>("/api/topics");
 }
