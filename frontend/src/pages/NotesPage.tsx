@@ -490,7 +490,7 @@ export function NotesPage({ onLogout }: Props) {
             <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                 <div style={{ display: "inline-flex", gap: 12, alignItems: "center", flexWrap: "nowrap" }}>
-                <label style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                <label style={{ display: "inline-flex", gap: 6, alignItems: "center", whiteSpace: "nowrap", flexShrink: 0 }}>
                   <input
                     type="radio"
                     checked={topicMode === "create"}
@@ -498,7 +498,7 @@ export function NotesPage({ onLogout }: Props) {
                   />
                   新規
                 </label>
-                <label style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                <label style={{ display: "inline-flex", gap: 6, alignItems: "center", whiteSpace: "nowrap", flexShrink: 0 }}>
                   <input
                     type="radio"
                     checked={topicMode === "edit"}
