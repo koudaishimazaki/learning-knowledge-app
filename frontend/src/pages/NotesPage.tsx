@@ -391,13 +391,13 @@ export function NotesPage({ onLogout }: Props) {
                   flex: "1 1 320px",
                 }}
               />
-              <label style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+              <label style={{ display: "inline-flex", gap: 6, alignItems: "center", whiteSpace: "nowrap" }}>
                 <input
                   type="checkbox"
                   checked={starredOnly}
                   onChange={(e) => setStarredOnly(e.target.checked)}
                 />
-                スターのみ
+                ★のみ
               </label>
               <select
                 value={sort}
@@ -489,6 +489,7 @@ export function NotesPage({ onLogout }: Props) {
             <div className="section-title">Topic管理</div>
             <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <div style={{ display: "inline-flex", gap: 12, alignItems: "center", flexWrap: "nowrap" }}>
                 <label style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
                   <input
                     type="radio"
@@ -505,6 +506,7 @@ export function NotesPage({ onLogout }: Props) {
                   />
                   編集
                 </label>
+                </div>
 
                 {topicMode === "edit" ? (
                   <select
