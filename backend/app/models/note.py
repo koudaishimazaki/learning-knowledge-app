@@ -20,6 +20,13 @@ class Note(Base):
         nullable=False,
     )
 
+    topic_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("topics.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     markdown_content: Mapped[str] = mapped_column(Text, default="", nullable=False)
     summary: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -33,4 +40,5 @@ class Note(Base):
     )
 
     user = relationship("User", lazy="joined")
+    topic = relationship("Topic", lazy="joined")
 

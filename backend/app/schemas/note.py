@@ -8,6 +8,8 @@ class NoteCreateRequest(BaseModel):
     markdown_content: str = ""
     summary: str | None = Field(default=None, max_length=500)
     is_starred: bool = False
+    topic_id: str | None = None
+    tag_ids: list[str] = Field(default_factory=list)
 
 
 class NoteUpdateRequest(BaseModel):
@@ -15,6 +17,8 @@ class NoteUpdateRequest(BaseModel):
     markdown_content: str | None = None
     summary: str | None = Field(default=None, max_length=500)
     is_starred: bool | None = None
+    topic_id: str | None = None
+    tag_ids: list[str] | None = None
 
 
 class NoteResponse(BaseModel):
@@ -23,6 +27,8 @@ class NoteResponse(BaseModel):
     markdown_content: str
     summary: str | None
     is_starred: bool
+    topic_id: str | None = None
+    tag_ids: list[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
