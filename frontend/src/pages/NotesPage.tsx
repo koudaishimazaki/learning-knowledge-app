@@ -805,7 +805,15 @@ export function NotesPage({ onLogout }: Props) {
                 </label>
 
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                  <label style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                  <label
+                    style={{
+                      display: "inline-flex",
+                      gap: 6,
+                      alignItems: "center",
+                      whiteSpace: "nowrap",
+                      flexShrink: 0,
+                    }}
+                  >
                     <input
                       type="checkbox"
                       checked={editStarred}
