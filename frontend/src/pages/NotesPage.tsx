@@ -5,6 +5,7 @@ import {
   createNote,
   createTopic,
   deleteNote,
+  createTag,
   listNotes,
   listTags,
   listTopics,
@@ -66,6 +67,8 @@ export function NotesPage({ onLogout }: Props) {
   const [topicIconType, setTopicIconType] = useState<"emoji" | "image">("emoji");
   const [topicIconEmoji, setTopicIconEmoji] = useState("🧠");
   const [topicIconUrl, setTopicIconUrl] = useState("");
+
+  const [newTagName, setNewTagName] = useState("");
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectedNote = useMemo(
@@ -233,6 +236,22 @@ export function NotesPage({ onLogout }: Props) {
         setTopicIconEmoji("🧠");
         setTopicIconUrl("");
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitTag(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newTagName.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await createTag({ name: newTagName.trim() });
+      setNewTagName("");
+      await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -526,6 +545,34 @@ export function NotesPage({ onLogout }: Props) {
                 ))}
               </div>
             </div>
+          </div>
+        </div>
+
+        <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
+          <div style={{ fontWeight: 700 }}>Tag追加</div>
+          <form onSubmit={submitTag} style={{ marginTop: 10, display: "flex", gap: 8 }}>
+            <input
+              value={newTagName}
+              onChange={(e) => setNewTagName(e.target.value)}
+              placeholder="例: react"
+              style={{ flex: "1 1 240px", padding: 10, borderRadius: 10, border: "1px solid #ccc" }}
+            />
+            <button
+              type="submit"
+              disabled={busy}
+              style={{
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "1px solid #222",
+                background: "#222",
+                color: "#fff",
+              }}
+            >
+              追加
+            </button>
+          </form>
+          <div style={{ marginTop: 10, color: "#666", fontSize: 12 }}>
+            追加したタグは、検索フィルタ・ノート編集のタグ候補に反映されます。
           </div>
         </div>
 

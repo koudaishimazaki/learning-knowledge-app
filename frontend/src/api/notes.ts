@@ -103,3 +103,10 @@ export async function listTags(): Promise<Tag[]> {
   return apiFetch<Tag[]>("/api/tags");
 }
 
+export async function createTag(input: { name: string }): Promise<Tag> {
+  return apiFetch<Tag>("/api/tags", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
