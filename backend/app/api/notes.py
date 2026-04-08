@@ -1,7 +1,7 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.deps import get_current_user, get_db
@@ -25,12 +25,33 @@ def to_note_response(note: Note) -> NoteResponse:
 
 @router.get("", response_model=list[NoteResponse])
 def list_notes(
+    q: str | None = Query(default=None, min_length=1, max_length=200),
+    starred: bool | None = None,
+    sort: str = Query(default="updated_desc", pattern="^(updated_desc|created_desc)$"),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    notes = db.execute(
-        select(Note).where(Note.user_id == current_user.id).order_by(Note.updated_at.desc())
-    ).scalars()
+    stmt = select(Note).where(Note.user_id == current_user.id)
+
+    if starred is True:
+        stmt = stmt.where(Note.is_starred.is_(True))
+    elif starred is False:
+        stmt = stmt.where(Note.is_starred.is_(False))
+
+    if q:
+        q_like = f"%{q}%"
+        stmt = stmt.where(or_(Note.title.ilike(q_like), Note.search_text.ilike(q_like)))
+
+    if sort == "created_desc":
+        stmt = stmt.order_by(Note.created_at.desc())
+    else:
+        stmt = stmt.order_by(Note.updated_at.desc())
+
+    stmt = stmt.limit(limit).offset(offset)
+
+    notes = db.execute(stmt).scalars()
     return [to_note_response(n) for n in notes]
 
 
