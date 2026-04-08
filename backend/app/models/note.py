@@ -1,11 +1,13 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, Computed, DateTime, ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
+
+# Note: `search_vector` is managed by Postgres (generated column via Alembic).
 
 
 class Note(Base):
@@ -31,6 +33,14 @@ class Note(Base):
     markdown_content: Mapped[str] = mapped_column(Text, default="", nullable=False)
     summary: Mapped[str | None] = mapped_column(String(500), nullable=True)
     search_text: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    search_vector: Mapped[object] = mapped_column(
+        TSVECTOR,
+        Computed(
+            "to_tsvector('simple', coalesce(title,'') || ' ' || coalesce(search_text,''))",
+            persisted=True,
+        ),
+        nullable=False,
+    )
 
     is_starred: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 

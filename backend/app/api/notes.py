@@ -1,7 +1,8 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, select
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.deps import get_current_user, get_db
@@ -35,7 +36,7 @@ def list_notes(
     starred: bool | None = None,
     topic_id: str | None = None,
     tag_ids: str | None = None,
-    sort: str = Query(default="updated_desc", pattern="^(updated_desc|created_desc)$"),
+    sort: str = Query(default="updated_desc", pattern="^(updated_desc|created_desc|relevance)$"),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -67,11 +68,16 @@ def list_notes(
                 Note.id.in_(select(NoteTag.note_id).where(NoteTag.tag_id.in_(tag_uuid_list)))
             )
 
+    ts_query = None
     if q:
-        q_like = f"%{q}%"
-        stmt = stmt.where(or_(Note.title.ilike(q_like), Note.search_text.ilike(q_like)))
+        # Use Postgres built-in parser (supports quoted phrases, AND/OR, -, etc.)
+        ts_query = func.websearch_to_tsquery("simple", q)
+        stmt = stmt.where(Note.search_vector.op("@@")(ts_query))
 
-    if sort == "created_desc":
+    if sort == "relevance" and ts_query is not None:
+        rank = func.ts_rank_cd(Note.search_vector, ts_query)
+        stmt = stmt.order_by(rank.desc(), Note.updated_at.desc())
+    elif sort == "created_desc":
         stmt = stmt.order_by(Note.created_at.desc())
     else:
         stmt = stmt.order_by(Note.updated_at.desc())
