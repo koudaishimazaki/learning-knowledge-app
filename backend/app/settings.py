@@ -18,6 +18,9 @@ class Settings(BaseSettings):
         default=60 * 24 * 7, validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES"
     )
 
+    # Automation / ingestion (optional). If set, enables API-key based ingestion endpoints.
+    automation_api_key: str | None = Field(default=None, validation_alias="AUTOMATION_API_KEY")
+
     cors_origins: str = Field(
         default="http://localhost:5173",
         validation_alias="CORS_ORIGINS",

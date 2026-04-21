@@ -32,6 +32,8 @@ class Note(Base):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     markdown_content: Mapped[str] = mapped_column(Text, default="", nullable=False)
     summary: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
+    source: Mapped[str | None] = mapped_column(String(50), nullable=True)
     search_text: Mapped[str] = mapped_column(Text, default="", nullable=False)
     search_vector: Mapped[object] = mapped_column(
         TSVECTOR,
