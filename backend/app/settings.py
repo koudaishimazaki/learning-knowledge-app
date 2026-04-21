@@ -20,6 +20,11 @@ class Settings(BaseSettings):
 
     # Automation / ingestion (optional). If set, enables API-key based ingestion endpoints.
     automation_api_key: str | None = Field(default=None, validation_alias="AUTOMATION_API_KEY")
+    automation_user_email: str | None = Field(
+        default=None,
+        validation_alias="AUTOMATION_USER_EMAIL",
+        description="Default target user for automation ingestion (email).",
+    )
 
     cors_origins: str = Field(
         default="http://localhost:5173",

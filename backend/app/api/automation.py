@@ -15,6 +15,7 @@ router = APIRouter(prefix="/automation", tags=["automation"])
 
 def get_automation_user(
     x_automation_key: str | None = Header(default=None, alias="X-Automation-Key"),
+    x_automation_user: str | None = Header(default=None, alias="X-Automation-User"),
     db: Session = Depends(get_db),
 ) -> User:
     if not settings.automation_api_key:
@@ -25,7 +26,20 @@ def get_automation_user(
     if not x_automation_key or x_automation_key != settings.automation_api_key:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid automation key")
 
-    # For single-user personal use: pick the first user (oldest).
+    # Determine target user:
+    # - request override: X-Automation-User (email)
+    # - default: AUTOMATION_USER_EMAIL
+    # - fallback: first user (oldest) for personal single-user use
+    target_email = (x_automation_user or settings.automation_user_email or "").strip() or None
+    if target_email:
+        user = db.execute(select(User).where(User.email == target_email)).scalar_one_or_none()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Automation target user not found: {target_email}",
+            )
+        return user
+
     user = db.execute(select(User).order_by(User.created_at.asc())).scalars().first()
     if not user:
         raise HTTPException(

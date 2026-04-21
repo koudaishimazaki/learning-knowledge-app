@@ -32,17 +32,20 @@ docker compose up -d --build
 ### 1) APIキーを設定
 
 `.env` に `AUTOMATION_API_KEY` を設定して起動してください。
+また、ノートを保存する対象ユーザを固定したい場合は `AUTOMATION_USER_EMAIL` を設定します。
 
 例:
 
 ```bash
 AUTOMATION_API_KEY=change-this-to-a-long-random-string
+AUTOMATION_USER_EMAIL=you@example.com
 ```
 
 ### 2) ノートのUpsert（topic/tagを名前で指定）
 
 - **endpoint**: `POST /api/automation/notes:upsert`
 - **auth header**: `X-Automation-Key: <AUTOMATION_API_KEY>`
+- **optional header**: `X-Automation-User: <email>`（リクエスト単位で対象ユーザを上書き）
 - **特徴**
   - `topic_name` / `tag_names` を **名前で指定**（存在しなければ自動作成）
   - `external_id` を指定すると **同じexternal_idは更新**（冪等）
