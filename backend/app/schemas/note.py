@@ -32,3 +32,14 @@ class NoteResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+
+class NoteListItemResponse(BaseModel):
+    id: str
+    title: str
+    summary: str | None
+    is_starred: bool
+    topic_id: str | None = None
+    tag_ids: list[str] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+

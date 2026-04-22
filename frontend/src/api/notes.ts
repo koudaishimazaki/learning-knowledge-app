@@ -1,5 +1,5 @@
 import { apiFetch } from "./http";
-import type { Note, Tag, Topic } from "../types/notes";
+import type { Note, NoteListItem, Tag, Topic } from "../types/notes";
 
 export type NotesListParams = {
   q?: string;
@@ -26,6 +26,10 @@ function toQuery(params: NotesListParams): string {
 
 export async function listNotes(params: NotesListParams): Promise<Note[]> {
   return apiFetch<Note[]>(`/api/notes${toQuery(params)}`);
+}
+
+export async function listNoteItems(params: NotesListParams): Promise<NoteListItem[]> {
+  return apiFetch<NoteListItem[]>(`/api/notes/items${toQuery(params)}`);
 }
 
 export async function createNote(input: {

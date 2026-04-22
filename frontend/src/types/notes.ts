@@ -10,6 +10,17 @@ export type Note = {
   updated_at: string;
 };
 
+export type NoteListItem = {
+  id: string;
+  title: string;
+  summary: string | null;
+  is_starred: boolean;
+  topic_id: string | null;
+  tag_ids: string[];
+  created_at: string;
+  updated_at: string;
+};
+
 export type Topic = {
   id: string;
   name: string;

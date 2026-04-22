@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -25,4 +27,17 @@ class AutomationUpsertNoteRequest(BaseModel):
 class AutomationUpsertNoteResponse(BaseModel):
     note_id: str
     created: bool
+
+
+class AutomationNoteListItem(BaseModel):
+    id: str
+    title: str
+    summary: str | None
+    is_starred: bool
+    topic_id: str | None = None
+    tag_ids: list[str] = Field(default_factory=list)
+    external_id: str | None = None
+    source: str | None = None
+    created_at: datetime
+    updated_at: datetime
 
